@@ -10,9 +10,23 @@ use std::time::Duration;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use lockedfile_test::*;
+use tracing::instrument;
+use tracing::Level;
+use tracing_subscriber::prelude::*;
 mod common;
 
+fn init_tracing() -> tracing_core::dispatcher::DefaultGuard {
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .with_ansi(true)
+        .pretty()
+        .finish()
+        .set_default()
+}
+
+#[instrument]
 async fn build_test_program() {
+    tracing::info!("Try to build the test program");
     let status = Command::new("cargo")
         .arg("build")
         .arg("--manifest-path")
@@ -22,6 +36,7 @@ async fn build_test_program() {
         .status()
         .await
         .unwrap();
+    tracing::info!(?status, "Test program build has finished");
     assert!(status.success());
 }
 
@@ -32,6 +47,10 @@ struct TestProcess {
 }
 
 impl TestProcess {
+    fn id(&self) -> Option<u32> {
+        self.child.id()
+    }
+
     async fn quit(mut self) {
         let mut stdin = self.stdin.lock().await;
 
@@ -123,21 +142,25 @@ impl TestProgram {
 }
 
 #[tokio::test]
+#[instrument(fields(testcase="exclusive_lock"))]
 async fn exclusive_lock() {
+    let _g = init_tracing();
+
     build_test_program().await;
 
     let path = common::create_temp_path();
-
-    println!("{:?}", path.as_os_str());
+    tracing::debug!("Temporary file path: {:?}", path.as_os_str());
 
     let testprog = TestProgram;
 
     let mut proc = testprog.spawn();
+    tracing::info!(main.pid = ?proc.id(), "Main child process has been spawned");
 
     proc.create_exclusive(path.to_path_buf()).await;
     proc.write_zeros(1024).await;
 
     let mut another = testprog.spawn();
+    tracing::info!(another.pid = ?another.id(), "Another child process has been spawned");
 
     tokio::join!(
         async {

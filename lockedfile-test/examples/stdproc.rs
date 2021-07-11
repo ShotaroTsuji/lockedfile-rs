@@ -9,10 +9,7 @@ fn main() {
     let mut buf = String::new();
 
     loop {
-        eprintln!("Enter the loop");
         let _ = handle.read_line(&mut buf).unwrap();
-        eprintln!("read_line: {}", buf);
-        eprintln!("buf.len() = {}", buf.len());
 
         if buf.is_empty() {
             break;
