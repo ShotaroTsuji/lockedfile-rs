@@ -142,7 +142,7 @@ impl TestProgram {
 }
 
 #[tokio::test]
-#[instrument(fields(testcase="exclusive_lock"))]
+#[instrument(level="trace")]
 async fn exclusive_lock() {
     let _g = init_tracing();
 

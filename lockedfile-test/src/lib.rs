@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
-use lockedfile::std::OwnedFile;
+use lockedfile::std::{OwnedFile, SharedFile};
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
 #[serde(tag="Message")]
@@ -10,11 +10,11 @@ pub enum Message {
     CreateExclusive(CreateExclusive),
     IoError(IoError),
     OpenedFile(OpenedFile),
+    OpenShared(OpenShared),
     WriteZeros(WriteZeros),
     Quit,
     /*
     OpenExclusive(PathBuf),
-    OpenShared(PathBuf),
     */
 }
 
@@ -40,6 +40,11 @@ pub struct CreateExclusive {
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
 pub struct OpenedFile {
     path: Option<PathBuf>,
+}
+
+#[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
+pub struct OpenShared {
+    pub file: PathBuf,
 }
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
@@ -74,6 +79,7 @@ impl Executor {
             Message::CreateExclusive(c) => self.create_exclusive(c.file),
             Message::IoError(_) => panic!("Request error"),
             Message::OpenedFile(_) => self.opened_file(),
+            Message::OpenShared(c) => self.open_shared(c.file),
             Message::WriteZeros(c) => self.write_zeros(c.size),
             Message::Quit => std::process::exit(0),
         }
@@ -108,6 +114,18 @@ impl Executor {
             OpenedFile {
                 path: self.file.as_ref().map(|x| x.1.clone()),
             })
+    }
+
+    pub fn open_shared(&mut self, path: PathBuf) -> Message {
+        match SharedFile::open(&path) {
+            Ok(file) => {
+                self.file.replace((file, path.clone()));
+                Message::OpenShared(OpenShared { file: path.clone() })
+            },
+            Err(e) => {
+                Message::IoError(IoError { msg: e.to_string(), })
+            },
+        }
     }
 }
 
