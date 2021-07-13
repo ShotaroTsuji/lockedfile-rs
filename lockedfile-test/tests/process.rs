@@ -26,17 +26,28 @@ fn init_tracing() -> tracing_core::dispatcher::DefaultGuard {
 #[instrument]
 async fn build_test_program() {
     tracing::info!("Try to build the test program");
-    let status = Command::new("cargo")
+    let output = Command::new("cargo")
         .arg("build")
         .arg("--manifest-path")
         .arg(&common::cargo_manifest_path())
         .arg("--example")
         .arg("stdproc")
-        .status()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
         .await
         .unwrap();
-    tracing::info!(?status, "Test program build has finished");
-    assert!(status.success());
+    tracing::info!(?output.status, "Test program build has finished");
+
+    if !output.status.success() {
+        let stdout = std::str::from_utf8(&output.stdout).unwrap();
+        let stderr = std::str::from_utf8(&output.stderr).unwrap();
+
+        println!("{}", stdout);
+        eprintln!("{}", stderr);
+
+        panic!("Test program building failed");
+    }
 }
 
 struct TestProcess {
@@ -151,6 +162,7 @@ impl TestProgram {
             .arg(&common::cargo_manifest_path())
             .arg("--example")
             .arg("stdproc")
+            .stderr(Stdio::null())
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
             .spawn()
