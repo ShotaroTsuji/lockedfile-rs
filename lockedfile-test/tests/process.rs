@@ -23,33 +23,6 @@ fn init_tracing() -> tracing_core::dispatcher::DefaultGuard {
         .set_default()
 }
 
-#[instrument]
-async fn build_test_program() {
-    tracing::info!("Try to build the test program");
-    let output = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(&common::cargo_manifest_path())
-        .arg("--example")
-        .arg("stdproc")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .unwrap();
-    tracing::info!(?output.status, "Test program build has finished");
-
-    if !output.status.success() {
-        let stdout = std::str::from_utf8(&output.stdout).unwrap();
-        let stderr = std::str::from_utf8(&output.stderr).unwrap();
-
-        println!("{}", stdout);
-        eprintln!("{}", stderr);
-
-        panic!("Test program building failed");
-    }
-}
-
 struct TestProcess {
     name: String,
     child: Child,
@@ -156,12 +129,7 @@ struct TestProgram;
 
 impl TestProgram {
     fn spawn(&self, name: String) -> TestProcess {
-        let mut child = Command::new("cargo")
-            .arg("run")
-            .arg("--manifest-path")
-            .arg(&common::cargo_manifest_path())
-            .arg("--example")
-            .arg("stdproc")
+        let mut child = Command::new(env!("CARGO_BIN_EXE_stdproc"))
             .stderr(Stdio::null())
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
@@ -189,8 +157,6 @@ async fn exclusive_lock() {
 
 #[instrument]
 async fn exclusive_lock_inner() {
-    build_test_program().await;
-
     let path = common::create_temp_path();
     tracing::debug!("Temporary file path: {:?}", path.as_os_str());
 
@@ -223,8 +189,6 @@ async fn open_shared() {
 
 #[instrument]
 async fn open_shared_inner() {
-    build_test_program().await;
-
     let path = common::create_temp_path();
     tracing::debug!("Temporary file path: {:?}", path.as_os_str());
 
