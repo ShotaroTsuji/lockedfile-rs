@@ -100,6 +100,17 @@ impl TestProcess {
         self.exec(req).await;
     }
 
+    async fn open_shared(&mut self, path: PathBuf) {
+        let req = Message::OpenShared (
+            OpenShared { file: path }
+        );
+        self.exec(req).await;
+    }
+
+    async fn read_range(&mut self, start: u64, end: u64) {
+        self.exec(Message::read_range(start, end)).await;
+    }
+
     async fn write_zeros(&mut self, size: usize) {
         let req = Message::WriteZeros(WriteZeros { size: size });
         self.send(req.clone()).await;
@@ -142,10 +153,14 @@ impl TestProgram {
 }
 
 #[tokio::test]
-#[instrument(level="trace")]
 async fn exclusive_lock() {
     let _g = init_tracing();
 
+    exclusive_lock_inner().await;
+}
+
+#[instrument]
+async fn exclusive_lock_inner() {
     build_test_program().await;
 
     let path = common::create_temp_path();
@@ -169,4 +184,44 @@ async fn exclusive_lock() {
         },
         another.create_exclusive(path.to_path_buf()),
     );
+}
+
+#[tokio::test]
+async fn open_shared() {
+    let _g = init_tracing();
+
+    open_shared_inner().await;
+}
+
+#[instrument]
+async fn open_shared_inner() {
+    build_test_program().await;
+
+    let path = common::create_temp_path();
+    tracing::debug!("Temporary file path: {:?}", path.as_os_str());
+
+    let prog = TestProgram;
+
+    tracing::info!(file = ?path.as_os_str(), "Write zeros to");
+    {
+        let mut proc = prog.spawn();
+        proc.create_exclusive(path.to_path_buf()).await;
+        proc.write_zeros(1024).await;
+        proc.quit().await;
+    }
+
+    let mut proc_a = prog.spawn();
+    let mut proc_b = prog.spawn();
+
+    tokio::join! {
+        async {
+            proc_a.open_shared(path.to_path_buf()).await;
+            proc_a.read_range(0, 512).await;
+        },
+        async {
+            proc_b.open_shared(path.to_path_buf()).await;
+            proc_b.read_range(256, 1024).await;
+        },
+        tokio::time::sleep(Duration::from_secs(1)),
+    };
 }

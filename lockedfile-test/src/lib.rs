@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use lockedfile::std::{OwnedFile, SharedFile};
@@ -11,6 +11,7 @@ pub enum Message {
     IoError(IoError),
     OpenedFile(OpenedFile),
     OpenShared(OpenShared),
+    ReadRange(ReadRange),
     WriteZeros(WriteZeros),
     Quit,
     /*
@@ -30,6 +31,14 @@ impl Message {
     pub fn from_str(s: &str) -> Self {
         serde_json::from_str(s).unwrap()
     }
+
+    pub fn io_error(s: String) -> Self {
+        Message::IoError(IoError { msg: s })
+    }
+
+    pub fn read_range(s: u64, e: u64) -> Self {
+        Message::ReadRange(ReadRange { start: s, end: e })
+    }
 }
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
@@ -45,6 +54,12 @@ pub struct OpenedFile {
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
 pub struct OpenShared {
     pub file: PathBuf,
+}
+
+#[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
+pub struct ReadRange {
+    pub start: u64,
+    pub end: u64,
 }
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
@@ -80,6 +95,7 @@ impl Executor {
             Message::IoError(_) => panic!("Request error"),
             Message::OpenedFile(_) => self.opened_file(),
             Message::OpenShared(c) => self.open_shared(c.file),
+            Message::ReadRange(c) => self.read_range(c.start, c.end),
             Message::WriteZeros(c) => self.write_zeros(c.size),
             Message::Quit => std::process::exit(0),
         }
@@ -125,6 +141,28 @@ impl Executor {
             Err(e) => {
                 Message::IoError(IoError { msg: e.to_string(), })
             },
+        }
+    }
+
+    pub fn read_range(&mut self, start: u64, end: u64) -> Message {
+        let size = end - start;
+        if size > 4096 {
+            return Message::io_error("Size is too large".to_owned());
+        }
+
+        if let Some((file, _)) = self.file.as_mut() {
+            match file.seek(SeekFrom::Start(start)) {
+                Ok(_) => {},
+                Err(e) => return Message::io_error(e.to_string()),
+            }
+
+            let mut buf = vec! [0; size as usize];
+            match file.read(&mut buf) {
+                Ok(size) => Message::read_range(start, start + size as u64),
+                Err(e) => Message::io_error(e.to_string()),
+            }
+        } else {
+            Message::io_error("File is not opened".to_owned())
         }
     }
 }
