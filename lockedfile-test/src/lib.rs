@@ -32,12 +32,24 @@ impl Message {
         serde_json::from_str(s).unwrap()
     }
 
+    pub fn create_exclusive(file: PathBuf) -> Self {
+        Message::CreateExclusive(CreateExclusive { file: file })
+    }
+
     pub fn io_error(s: String) -> Self {
         Message::IoError(IoError { msg: s })
     }
 
+    pub fn open_shared(file: PathBuf) -> Self {
+        Message::OpenShared(OpenShared { file: file })
+    }
+
     pub fn read_range(s: u64, e: u64) -> Self {
         Message::ReadRange(ReadRange { start: s, end: e })
+    }
+
+    pub fn write_zeros(size: usize) -> Self {
+        Message::WriteZeros(WriteZeros { size: size })
     }
 }
 
@@ -105,13 +117,13 @@ impl Executor {
         let file = match OwnedFile::create(&path) {
             Ok(file) => file,
             Err(e) => {
-                return Message::IoError(IoError { msg: e.to_string() });
+                return Message::io_error(e.to_string());
             },
         };
 
         self.file.replace((file, path.clone()));
 
-        Message::CreateExclusive(CreateExclusive { file: path.clone() })
+        Message::create_exclusive(path.clone())
     }
 
     pub fn write_zeros(&mut self, size: usize) -> Message {
@@ -122,7 +134,7 @@ impl Executor {
 
         let written_size = file.write(&buf).unwrap();
 
-        Message::WriteZeros(WriteZeros { size: written_size })
+        Message::write_zeros(written_size)
     }
 
     pub fn opened_file(&mut self) -> Message {
@@ -136,11 +148,9 @@ impl Executor {
         match SharedFile::open(&path) {
             Ok(file) => {
                 self.file.replace((file, path.clone()));
-                Message::OpenShared(OpenShared { file: path.clone() })
+                Message::open_shared(path.clone())
             },
-            Err(e) => {
-                Message::IoError(IoError { msg: e.to_string(), })
-            },
+            Err(e) => Message::io_error(e.to_string()),
         }
     }
 

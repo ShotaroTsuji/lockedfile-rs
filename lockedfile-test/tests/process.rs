@@ -11,13 +11,12 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use lockedfile_test::*;
 use tracing::instrument;
-use tracing::Level;
 use tracing_subscriber::prelude::*;
 mod common;
 
 fn init_tracing() -> tracing_core::dispatcher::DefaultGuard {
     tracing_subscriber::fmt()
-        .with_max_level(Level::TRACE)
+        .with_env_filter("process=trace,lockedfile-test=trace")
         .with_ansi(true)
         .pretty()
         .finish()
@@ -41,9 +40,16 @@ async fn build_test_program() {
 }
 
 struct TestProcess {
+    name: String,
     child: Child,
     stdin: Arc<Mutex<ChildStdin>>,
     stdout: Arc<Mutex<BufReader<ChildStdout>>>,
+}
+
+impl std::fmt::Debug for TestProcess {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "TestProcess(\"{}\")", self.name)
+    }
 }
 
 impl TestProcess {
@@ -84,38 +90,47 @@ impl TestProcess {
     }
 
     async fn exec(&mut self, request: Message) {
+        tracing::debug!(request = ?request, "Execute command");
+
         self.send(request.clone()).await;
 
         let reply = self.receive().await;
 
+        tracing::debug!(reply = ?reply, "Received a reply");
+
         assert_eq!(request, reply);
     }
 
+    #[instrument]
     async fn create_exclusive(&mut self, path: PathBuf) {
-        let req = Message::CreateExclusive(
-            CreateExclusive {
-                file: path,
-            });
+        let req = Message::create_exclusive(path);
 
         self.exec(req).await;
     }
 
+    #[instrument]
     async fn open_shared(&mut self, path: PathBuf) {
-        let req = Message::OpenShared (
-            OpenShared { file: path }
-        );
+        let req = Message::open_shared(path);
+
         self.exec(req).await;
     }
 
+    #[instrument]
     async fn read_range(&mut self, start: u64, end: u64) {
         self.exec(Message::read_range(start, end)).await;
     }
 
+    #[instrument]
     async fn write_zeros(&mut self, size: usize) {
-        let req = Message::WriteZeros(WriteZeros { size: size });
+        let req = Message::write_zeros(size);
+
+        tracing::debug!(request=?req, "Write data");
+
         self.send(req.clone()).await;
 
         let rep = self.receive().await;
+        tracing::debug!(reply=?rep, "Write command is done");
+
         match rep {
             Message::WriteZeros(w) => {
                 assert_eq!(w.size, size);
@@ -129,7 +144,7 @@ impl TestProcess {
 struct TestProgram;
 
 impl TestProgram {
-    fn spawn(&self) -> TestProcess {
+    fn spawn(&self, name: String) -> TestProcess {
         let mut child = Command::new("cargo")
             .arg("run")
             .arg("--manifest-path")
@@ -145,6 +160,7 @@ impl TestProgram {
         let stdout = child.stdout.take().unwrap();
 
         TestProcess {
+            name: name,
             child: child,
             stdin: Arc::new(Mutex::new(stdin)),
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
@@ -168,13 +184,13 @@ async fn exclusive_lock_inner() {
 
     let testprog = TestProgram;
 
-    let mut proc = testprog.spawn();
+    let mut proc = testprog.spawn("Main process".to_owned());
     tracing::info!(main.pid = ?proc.id(), "Main child process has been spawned");
 
     proc.create_exclusive(path.to_path_buf()).await;
     proc.write_zeros(1024).await;
 
-    let mut another = testprog.spawn();
+    let mut another = testprog.spawn("Another process".to_owned());
     tracing::info!(another.pid = ?another.id(), "Another child process has been spawned");
 
     tokio::join!(
@@ -204,24 +220,26 @@ async fn open_shared_inner() {
 
     tracing::info!(file = ?path.as_os_str(), "Write zeros to");
     {
-        let mut proc = prog.spawn();
+        let mut proc = prog.spawn("Create file".to_owned());
         proc.create_exclusive(path.to_path_buf()).await;
         proc.write_zeros(1024).await;
         proc.quit().await;
     }
 
-    let mut proc_a = prog.spawn();
-    let mut proc_b = prog.spawn();
+    let mut proc_a = prog.spawn("Process A".to_owned());
+    let mut proc_b = prog.spawn("Process B".to_owned());
+
+    tracing::info!("Open the file with child processes");
 
     tokio::join! {
-        async {
-            proc_a.open_shared(path.to_path_buf()).await;
-            proc_a.read_range(0, 512).await;
-        },
-        async {
-            proc_b.open_shared(path.to_path_buf()).await;
-            proc_b.read_range(256, 1024).await;
-        },
-        tokio::time::sleep(Duration::from_secs(1)),
+        proc_a.open_shared(path.to_path_buf()),
+        proc_b.open_shared(path.to_path_buf()),
+    };
+
+    tracing::info!("Read the file");
+
+    tokio::join! {
+        proc_a.read_range(0, 512),
+        proc_b.read_range(256, 1024),
     };
 }
