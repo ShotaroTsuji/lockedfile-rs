@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use lockedfile::std::{OwnedFile, SharedFile};
 
+pub mod file;
+
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
 #[serde(tag="Message")]
 pub enum Message {
