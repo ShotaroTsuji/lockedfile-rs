@@ -37,12 +37,11 @@ impl std::fmt::Debug for TestProcess {
 }
 
 impl TestProcess {
-    fn id(&self) -> Option<u32> {
-        self.child.id()
-    }
-
+    #[instrument]
     async fn quit(mut self) {
         let mut stdin = self.stdin.lock().await;
+
+        tracing::info!("Send a quit message");
 
         let req = Message::Quit;
         let mut s = req.to_json_string();
@@ -52,12 +51,13 @@ impl TestProcess {
         stdin.flush().await.unwrap();
 
         let _ = self.child.wait().await.unwrap();
+
+        tracing::info!("{:?} has quit", self);
     }
 
     async fn send(&mut self, req: Message) {
         let mut s = req.to_json_string();
         s.push('\n');
-        eprintln!("Data to be sent: {:?}", s);
 
         let mut stdin = self.stdin.lock().await;
         stdin.write(s.as_bytes()).await.unwrap();
@@ -74,13 +74,11 @@ impl TestProcess {
     }
 
     async fn exec(&mut self, request: Message) {
-        tracing::debug!(request = ?request, "Execute command");
-
+        tracing::debug!(request = ?request, "Send a message");
         self.send(request.clone()).await;
 
         let reply = self.receive().await;
-
-        tracing::debug!(reply = ?reply, "Received a reply");
+        tracing::debug!(reply = ?reply, "Received a message");
 
         assert_eq!(request, reply);
     }
@@ -135,6 +133,7 @@ impl TestProcess {
 struct TestProgram;
 
 impl TestProgram {
+    #[instrument]
     fn spawn(&self, name: String) -> TestProcess {
         let mut child = Command::new(env!("CARGO_BIN_EXE_stdproc"))
             .stderr(Stdio::null())
@@ -142,6 +141,8 @@ impl TestProgram {
             .stdin(Stdio::piped())
             .spawn()
             .unwrap();
+
+        tracing::info!(name=?name, pid=?child.id(), "Spawned a child process");
 
         let stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
@@ -170,14 +171,12 @@ async fn exclusive_lock_inner() {
     let testprog = TestProgram;
 
     let mut proc = testprog.spawn("Main process".to_owned());
-    tracing::info!(main.pid = ?proc.id(), "Main child process has been spawned");
 
     proc.create_exclusive(path.to_path_buf()).await;
     proc.write_zeros(1024).await;
     proc.file_length(1024).await;
 
     let mut another = testprog.spawn("Another process".to_owned());
-    tracing::info!(another.pid = ?another.id(), "Another child process has been spawned");
 
     tokio::join!(
         async {
@@ -189,6 +188,8 @@ async fn exclusive_lock_inner() {
             another.file_length(1024).await;
         },
     );
+
+    another.quit().await;
 }
 
 #[tokio::test]
@@ -228,5 +229,10 @@ async fn open_shared_inner() {
     tokio::join! {
         proc_a.read_range(0, 512),
         proc_b.read_range(256, 1024),
+    };
+
+    tokio::join! {
+        proc_a.quit(),
+        proc_b.quit(),
     };
 }
