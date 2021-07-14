@@ -110,22 +110,8 @@ impl TestProcess {
     }
 
     #[instrument]
-    async fn write_zeros(&mut self, size: usize) {
-        let req = Message::write_zeros(size);
-
-        tracing::debug!(request=?req, "Write data");
-
-        self.send(req.clone()).await;
-
-        let rep = self.receive().await;
-        tracing::debug!(reply=?rep, "Write command is done");
-
-        match rep {
-            Message::WriteZeros(w) => {
-                assert_eq!(w.size, size);
-            },
-            _ => panic!("Reply does not match request"),
-        }
+    async fn write_range(&mut self, start: u64, end: u64) {
+        self.exec(Message::write_range(start, end)).await;
     }
 }
 
@@ -173,7 +159,7 @@ async fn exclusive_lock_inner() {
     let mut proc = testprog.spawn("Main process".to_owned());
 
     proc.create_exclusive(path.to_path_buf()).await;
-    proc.write_zeros(1024).await;
+    proc.write_range(0, 1024).await;
     proc.file_length(1024).await;
 
     let mut another = testprog.spawn("Another process".to_owned());
@@ -206,11 +192,10 @@ async fn open_shared_inner() {
 
     let prog = TestProgram;
 
-    tracing::info!(file = ?path.as_os_str(), "Write zeros to");
     {
         let mut proc = prog.spawn("Create file".to_owned());
         proc.create_exclusive(path.to_path_buf()).await;
-        proc.write_zeros(1024).await;
+        proc.write_range(0, 1024).await;
         proc.quit().await;
     }
 

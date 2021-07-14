@@ -13,7 +13,7 @@ pub enum Message {
     OpenedFile(OpenedFile),
     OpenShared(OpenShared),
     ReadRange(ReadRange),
-    WriteZeros(WriteZeros),
+    WriteRange(WriteRange),
     Quit,
     /*
     OpenExclusive(PathBuf),
@@ -53,8 +53,8 @@ impl Message {
         Message::ReadRange(ReadRange { start: s, end: e })
     }
 
-    pub fn write_zeros(size: usize) -> Self {
-        Message::WriteZeros(WriteZeros { size: size })
+    pub fn write_range(s: u64, e: u64) -> Self {
+        Message::WriteRange(WriteRange { start: s, end: e })
     }
 }
 
@@ -85,8 +85,9 @@ pub struct ReadRange {
 }
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
-pub struct WriteZeros {
-    pub size: usize,
+pub struct WriteRange {
+    pub start: u64,
+    pub end: u64,
 }
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
@@ -119,7 +120,7 @@ impl Executor {
             Message::OpenedFile(_) => self.opened_file(),
             Message::OpenShared(c) => self.open_shared(c.file),
             Message::ReadRange(c) => self.read_range(c.start, c.end),
-            Message::WriteZeros(c) => self.write_zeros(c.size),
+            Message::WriteRange(c) => self.write_range(c.start, c.end),
             Message::Quit => std::process::exit(0),
         }
     }
@@ -146,17 +147,6 @@ impl Executor {
         } else {
             Message::io_error("File is not opened".to_owned())
         }
-    }
-
-    pub fn write_zeros(&mut self, size: usize) -> Message {
-        assert!(size <= 4096);
-
-        let (file, _) = self.file.as_mut().unwrap();
-        let buf = vec![0; size];
-
-        let written_size = file.write(&buf).unwrap();
-
-        Message::write_zeros(written_size)
     }
 
     pub fn opened_file(&mut self) -> Message {
@@ -196,6 +186,38 @@ impl Executor {
         } else {
             Message::io_error("File is not opened".to_owned())
         }
+    }
+
+    pub fn write_range(&mut self, start: u64, end: u64) -> Message {
+        let size = match calc_and_check_size(start..end) {
+            Ok(size) => size,
+            Err(e) => return Message::io_error(e),
+        };
+
+        if let Some((file, _)) = self.file.as_mut() {
+            match file.seek(SeekFrom::Start(start)) {
+                Ok(_) => {},
+                Err(e) => return Message::io_error(e.to_string()),
+            }
+
+            let buf = vec![0; size as usize];
+            match file.write(&buf) {
+                Ok(size) => Message::write_range(start, start + size as u64),
+                Err(e) => Message::io_error(e.to_string()),
+            }
+        } else {
+            Message::io_error("File is not opened".to_owned())
+        }
+    }
+}
+
+fn calc_and_check_size(range: std::ops::Range<u64>) -> Result<u64, String> {
+    if range.start > range.end {
+        Err("range.start > range.end".to_owned())
+    } else if range.end > 4096 {
+        Err("range.end > 4096".to_owned())
+    } else {
+        Ok(range.end - range.start)
     }
 }
 
