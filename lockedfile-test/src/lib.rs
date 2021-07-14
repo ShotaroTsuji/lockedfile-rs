@@ -167,10 +167,10 @@ impl Executor {
     }
 
     pub fn read_range(&mut self, start: u64, end: u64) -> Message {
-        let size = end - start;
-        if size > 4096 {
-            return Message::io_error("Size is too large".to_owned());
-        }
+        let size = match calc_and_check_size(start..end) {
+            Ok(size) => size,
+            Err(e) => return Message::io_error(e),
+        };
 
         if let Some((file, _)) = self.file.as_mut() {
             match file.seek(SeekFrom::Start(start)) {
