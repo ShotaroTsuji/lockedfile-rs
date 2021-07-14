@@ -8,6 +8,7 @@ use lockedfile::std::{OwnedFile, SharedFile};
 #[serde(tag="Message")]
 pub enum Message {
     CreateExclusive(CreateExclusive),
+    FileLength(FileLength),
     IoError(IoError),
     OpenedFile(OpenedFile),
     OpenShared(OpenShared),
@@ -36,6 +37,10 @@ impl Message {
         Message::CreateExclusive(CreateExclusive { file: file })
     }
 
+    pub fn file_length(len: u64) -> Self {
+        Message::FileLength(FileLength { len: len })
+    }
+
     pub fn io_error(s: String) -> Self {
         Message::IoError(IoError { msg: s })
     }
@@ -56,6 +61,11 @@ impl Message {
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
 pub struct CreateExclusive {
     pub file: PathBuf,
+}
+
+#[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
+pub struct FileLength {
+    pub len: u64,
 }
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
@@ -104,6 +114,7 @@ impl Executor {
     pub fn execute(&mut self, req: Message) -> Message {
         match req {
             Message::CreateExclusive(c) => self.create_exclusive(c.file),
+            Message::FileLength(_) => self.file_length(),
             Message::IoError(_) => panic!("Request error"),
             Message::OpenedFile(_) => self.opened_file(),
             Message::OpenShared(c) => self.open_shared(c.file),
@@ -124,6 +135,17 @@ impl Executor {
         self.file.replace((file, path.clone()));
 
         Message::create_exclusive(path.clone())
+    }
+
+    pub fn file_length(&mut self) -> Message {
+        if let Some((file, _)) = self.file.as_mut() {
+            match file.seek(SeekFrom::End(0)) {
+                Ok(size) => Message::file_length(size),
+                Err(e) => Message::io_error(e.to_string()),
+            }
+        } else {
+            Message::io_error("File is not opened".to_owned())
+        }
     }
 
     pub fn write_zeros(&mut self, size: usize) -> Message {

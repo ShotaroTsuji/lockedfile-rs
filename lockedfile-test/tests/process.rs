@@ -93,6 +93,13 @@ impl TestProcess {
     }
 
     #[instrument]
+    async fn file_length(&mut self, expected: u64) {
+        let req = Message::file_length(expected);
+        
+        self.exec(req).await;
+    }
+
+    #[instrument]
     async fn open_shared(&mut self, path: PathBuf) {
         let req = Message::open_shared(path);
 
@@ -167,6 +174,7 @@ async fn exclusive_lock_inner() {
 
     proc.create_exclusive(path.to_path_buf()).await;
     proc.write_zeros(1024).await;
+    proc.file_length(1024).await;
 
     let mut another = testprog.spawn("Another process".to_owned());
     tracing::info!(another.pid = ?another.id(), "Another child process has been spawned");
@@ -176,7 +184,10 @@ async fn exclusive_lock_inner() {
             tokio::time::sleep(Duration::from_secs(1)).await;
             proc.quit().await;
         },
-        another.create_exclusive(path.to_path_buf()),
+        async {
+            another.create_exclusive(path.to_path_buf()).await;
+            another.file_length(1024).await;
+        },
     );
 }
 
