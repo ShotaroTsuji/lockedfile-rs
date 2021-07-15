@@ -1,8 +1,10 @@
 use std::io::BufRead;
 use lockedfile_test::Executor;
+use lockedfile_test::file::StdFile;
 
-fn main() {
-    let mut ex = Executor::new();
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    let mut ex = Executor::<StdFile>::new();
     let stdin = std::io::stdin();
     let mut handle = stdin.lock();
 
@@ -15,7 +17,7 @@ fn main() {
             break;
         }
 
-        let result = ex.exec_str(&buf);
+        let result = ex.exec_str(&buf).await;
 
         match result {
             Ok(rep) => {

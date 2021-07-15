@@ -1,8 +1,7 @@
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
-use lockedfile::std::{OwnedFile, SharedFile};
+use std::io::SeekFrom;
+use crate::file::File;
 
 pub mod file;
 
@@ -97,38 +96,38 @@ pub struct IoError {
     msg: String,
 }
 
-pub struct Executor {
-    file: Option<(File, PathBuf)>,
+pub struct Executor<F> {
+    file: Option<(F, PathBuf)>,
 }
 
-impl Executor {
+impl<F: File> Executor<F> {
     pub fn new() -> Self {
         Self {
             file: None,
         }
     }
 
-    pub fn exec_str(&mut self, s: &str) -> Result<Message, String> {
+    pub async fn exec_str(&mut self, s: &str) -> Result<Message, String> {
         let req = Message::from_str(s);
 
-        Ok(self.execute(req))
+        Ok(self.execute(req).await)
     }
 
-    pub fn execute(&mut self, req: Message) -> Message {
+    pub async fn execute(&mut self, req: Message) -> Message {
         match req {
-            Message::CreateExclusive(c) => self.create_exclusive(c.file),
-            Message::FileLength(_) => self.file_length(),
+            Message::CreateExclusive(c) => self.create_exclusive(c.file).await,
+            Message::FileLength(_) => self.file_length().await,
             Message::IoError(_) => panic!("Request error"),
             Message::OpenedFile(_) => self.opened_file(),
-            Message::OpenShared(c) => self.open_shared(c.file),
-            Message::ReadRange(c) => self.read_range(c.start, c.end),
-            Message::WriteRange(c) => self.write_range(c.start, c.end),
+            Message::OpenShared(c) => self.open_shared(c.file).await,
+            Message::ReadRange(c) => self.read_range(c.start, c.end).await,
+            Message::WriteRange(c) => self.write_range(c.start, c.end).await,
             Message::Quit => std::process::exit(0),
         }
     }
 
-    pub fn create_exclusive(&mut self, path: PathBuf) -> Message {
-        let file = match OwnedFile::create(&path) {
+    pub async fn create_exclusive(&mut self, path: PathBuf) -> Message {
+        let file = match <F as File>::create_owned(path.clone()).await {
             Ok(file) => file,
             Err(e) => {
                 return Message::io_error(e.to_string());
@@ -140,9 +139,9 @@ impl Executor {
         Message::create_exclusive(path.clone())
     }
 
-    pub fn file_length(&mut self) -> Message {
+    pub async fn file_length(&mut self) -> Message {
         if let Some((file, _)) = self.file.as_mut() {
-            match file.seek(SeekFrom::End(0)) {
+            match file.seek(SeekFrom::End(0)).await {
                 Ok(size) => Message::file_length(size),
                 Err(e) => Message::io_error(e.to_string()),
             }
@@ -158,8 +157,8 @@ impl Executor {
             })
     }
 
-    pub fn open_shared(&mut self, path: PathBuf) -> Message {
-        match SharedFile::open(&path) {
+    pub async fn open_shared(&mut self, path: PathBuf) -> Message {
+        match <F as File>::open_shared(path.clone()).await {
             Ok(file) => {
                 self.file.replace((file, path.clone()));
                 Message::open_shared(path.clone())
@@ -168,21 +167,21 @@ impl Executor {
         }
     }
 
-    pub fn read_range(&mut self, start: u64, end: u64) -> Message {
+    pub async fn read_range(&mut self, start: u64, end: u64) -> Message {
         let size = match calc_and_check_size(start..end) {
             Ok(size) => size,
             Err(e) => return Message::io_error(e),
         };
 
         if let Some((file, _)) = self.file.as_mut() {
-            match file.seek(SeekFrom::Start(start)) {
+            match file.seek(SeekFrom::Start(start)).await {
                 Ok(_) => {},
                 Err(e) => return Message::io_error(e.to_string()),
             }
 
             let mut buf = vec! [0; size as usize];
-            match file.read(&mut buf) {
-                Ok(size) => Message::read_range(start, start + size as u64),
+            match file.read_exact(&mut buf).await {
+                Ok(_) => Message::read_range(start, end),
                 Err(e) => Message::io_error(e.to_string()),
             }
         } else {
@@ -190,21 +189,21 @@ impl Executor {
         }
     }
 
-    pub fn write_range(&mut self, start: u64, end: u64) -> Message {
+    pub async fn write_range(&mut self, start: u64, end: u64) -> Message {
         let size = match calc_and_check_size(start..end) {
             Ok(size) => size,
             Err(e) => return Message::io_error(e),
         };
 
         if let Some((file, _)) = self.file.as_mut() {
-            match file.seek(SeekFrom::Start(start)) {
+            match file.seek(SeekFrom::Start(start)).await {
                 Ok(_) => {},
                 Err(e) => return Message::io_error(e.to_string()),
             }
 
             let buf = vec![0; size as usize];
-            match file.write(&buf) {
-                Ok(size) => Message::write_range(start, start + size as u64),
+            match file.write_all(&buf).await {
+                Ok(_) => Message::write_range(start, end),
                 Err(e) => Message::io_error(e.to_string()),
             }
         } else {
