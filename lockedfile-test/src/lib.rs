@@ -11,7 +11,6 @@ pub enum Message {
     CreateExclusive(CreateExclusive),
     FileLength(FileLength),
     IoError(IoError),
-    OpenedFile(OpenedFile),
     OpenShared(OpenShared),
     ReadRange(ReadRange),
     WriteRange(WriteRange),
@@ -70,11 +69,6 @@ pub struct FileLength {
 }
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
-pub struct OpenedFile {
-    path: Option<PathBuf>,
-}
-
-#[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
 pub struct OpenShared {
     pub file: PathBuf,
 }
@@ -118,7 +112,6 @@ impl<F: File> Executor<F> {
             Message::CreateExclusive(c) => self.create_exclusive(c.file).await,
             Message::FileLength(_) => self.file_length().await,
             Message::IoError(_) => panic!("Request error"),
-            Message::OpenedFile(_) => self.opened_file(),
             Message::OpenShared(c) => self.open_shared(c.file).await,
             Message::ReadRange(c) => self.read_range(c.start, c.end).await,
             Message::WriteRange(c) => self.write_range(c.start, c.end).await,
@@ -148,13 +141,6 @@ impl<F: File> Executor<F> {
         } else {
             Message::io_error("File is not opened".to_owned())
         }
-    }
-
-    pub fn opened_file(&mut self) -> Message {
-        Message::OpenedFile(
-            OpenedFile {
-                path: self.file.as_ref().map(|x| x.1.clone()),
-            })
     }
 
     pub async fn open_shared(&mut self, path: PathBuf) -> Message {
