@@ -6,9 +6,9 @@ pub struct SharedFile;
 
 impl SharedFile {
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<std::fs::File> {
-        OpenOptions::shared()
+        OpenOptions::new()
             .read(true)
-            .open(path)
+            .open_shared(path)
     }
 }
 
@@ -16,46 +16,30 @@ pub struct OwnedFile;
 
 impl OwnedFile {
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<std::fs::File> {
-        OpenOptions::exclusive()
+        OpenOptions::new()
             .read(true)
             .write(true)
-            .open(path)
+            .open_exclusive(path)
     }
 
     pub fn create<P: AsRef<Path>>(path: P) -> std::io::Result<std::fs::File> {
-        OpenOptions::exclusive()
+        OpenOptions::new()
             .write(true)
             .create(true)
-            .open(path)
+            .open_exclusive(path)
     }
-}
-
-enum LockKind {
-    Shared,
-    Exclusive,
 }
 
 pub struct OpenOptions {
     sys: std::fs::OpenOptions,
-    kind: LockKind,
     #[cfg(unix)]
     flags: i32,
 }
 
 impl OpenOptions {
-    pub fn shared() -> Self {
+    pub fn new() -> Self {
         Self {
             sys: std::fs::OpenOptions::new(),
-            kind: LockKind::Shared,
-            #[cfg(unix)]
-            flags: 0,
-        }
-    }
-
-    pub fn exclusive() -> Self {
-        Self {
-            sys: std::fs::OpenOptions::new(),
-            kind: LockKind::Exclusive,
             #[cfg(unix)]
             flags: 0,
         }
@@ -97,14 +81,15 @@ impl OpenOptions {
         self
     }
 
-    pub fn open<P: AsRef<Path>>(&self, path: P) -> std::io::Result<std::fs::File> {
-        let flags = match self.kind {
-            LockKind::Shared => self.flags | libc::O_SHLOCK,
-            LockKind::Exclusive => self.flags | libc::O_EXLOCK,
-        };
-
+    pub fn open_exclusive<P: AsRef<Path>>(&self, path: P) -> std::io::Result<std::fs::File> {
         self.sys.clone()
-            .custom_flags(flags)
+            .custom_flags(self.flags | libc::O_EXLOCK)
+            .open(path)
+    }
+
+    pub fn open_shared<P: AsRef<Path>>(&self, path: P) -> std::io::Result<std::fs::File> {
+        self.sys.clone()
+            .custom_flags(self.flags | libc::O_SHLOCK)
             .open(path)
     }
 }

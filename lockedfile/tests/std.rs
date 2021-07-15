@@ -82,10 +82,10 @@ fn open_and_write_owned() {
 #[test]
 fn create_and_append_with_shared_lock() {
     let path = common::create_temp_path();
-    let mut file = OpenOptions::shared()
+    let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&path)
+        .open_shared(&path)
         .unwrap();
 
     let size = write_block(&mut file).unwrap();
@@ -95,10 +95,10 @@ fn create_and_append_with_shared_lock() {
 #[test]
 fn create_and_append_with_exclusive_lock() {
     let path = common::create_temp_path();
-    let mut file = OpenOptions::exclusive()
+    let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&path)
+        .open_exclusive(&path)
         .unwrap();
 
     let size = write_block(&mut file).unwrap();
@@ -108,9 +108,9 @@ fn create_and_append_with_exclusive_lock() {
 #[test]
 fn read_file_with_shared_lock() {
     let path = create_temp_file_with_content();
-    let mut file = OpenOptions::shared()
+    let mut file = OpenOptions::new()
         .read(true)
-        .open(&path)
+        .open_shared(&path)
         .unwrap();
 
     let mut buf = vec![0u8; 4096];
@@ -121,9 +121,9 @@ fn read_file_with_shared_lock() {
 #[test]
 fn read_file_with_exclusive_lock() {
     let path = create_temp_file_with_content();
-    let mut file = OpenOptions::exclusive()
+    let mut file = OpenOptions::new()
         .read(true)
-        .open(&path)
+        .open_exclusive(&path)
         .unwrap();
 
     let mut buf = vec![0u8; 4096];
