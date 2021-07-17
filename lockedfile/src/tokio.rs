@@ -1,5 +1,36 @@
 use std::path::Path;
 
+pub struct SharedFile;
+
+impl SharedFile {
+    pub async fn open<P: AsRef<Path>>(path: P) -> std::io::Result<tokio::fs::File> {
+        OpenOptions::new()
+            .read(true)
+            .open_shared(path)
+            .await
+    }
+}
+
+pub struct OwnedFile;
+
+impl OwnedFile {
+    pub async fn open<P: AsRef<Path>>(path: P) -> std::io::Result<tokio::fs::File> {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open_exclusive(path)
+            .await
+    }
+
+    pub async fn create<P: AsRef<Path>>(path: P) -> std::io::Result<tokio::fs::File> {
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open_exclusive(path)
+            .await
+    }
+}
+
 pub struct OpenOptions {
     sys: tokio::fs::OpenOptions,
     #[cfg(unix)]
