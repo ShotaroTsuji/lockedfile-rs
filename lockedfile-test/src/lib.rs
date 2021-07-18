@@ -32,7 +32,12 @@ impl Message {
     }
 
     pub fn from_str(s: &str) -> Self {
-        serde_json::from_str(s).unwrap()
+        match serde_json::from_str(s) {
+            Ok(msg) => msg,
+            Err(e) => {
+                panic!("Parse error: {}\n{}", e, s);
+            },
+        }
     }
 
     pub fn create_exclusive(file: PathBuf) -> Self {

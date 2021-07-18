@@ -30,7 +30,7 @@ pub fn execute_with_args() {
 
     match AppMode::from_option_flag(&flag) {
         Some(AppMode::Std) => execute_std(),
-        Some(AppMode::Tokio) => unimplemented!(),
+        Some(AppMode::Tokio) => execute_tokio(),
         None => panic!(),
     }
 }
@@ -39,6 +39,16 @@ pub fn execute_std() {
     let executor = Executor::<StdFile>::new();
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async move { repl(executor).await; })
+}
+
+pub fn execute_tokio() {
+    let executor = Executor::<TokioFile>::new();
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(4)
         .build()
         .unwrap()
         .block_on(async move { repl(executor).await; })

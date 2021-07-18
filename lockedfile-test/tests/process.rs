@@ -150,18 +150,23 @@ impl TestProgram {
 }
 
 #[tokio::test]
-async fn exclusive_lock() {
+async fn exclusive_lock_std() {
     let _g = init_tracing();
+    exclusive_lock_inner(AppMode::Std).await;
+}
 
-    exclusive_lock_inner().await;
+#[tokio::test]
+async fn exclusive_lock_tokio() {
+    let _g = init_tracing();
+    exclusive_lock_inner(AppMode::Tokio).await;
 }
 
 #[instrument]
-async fn exclusive_lock_inner() {
+async fn exclusive_lock_inner(mode: AppMode) {
     let path = common::create_temp_path();
     tracing::debug!("Temporary file path: {:?}", path.as_os_str());
 
-    let testprog = TestProgram::new(AppMode::Std);
+    let testprog = TestProgram::new(mode);
 
     let mut proc = testprog.spawn("Main process".to_owned());
 
@@ -186,18 +191,23 @@ async fn exclusive_lock_inner() {
 }
 
 #[tokio::test]
-async fn open_shared() {
+async fn open_shared_std() {
     let _g = init_tracing();
+    open_shared_inner(AppMode::Std).await;
+}
 
-    open_shared_inner().await;
+#[tokio::test]
+async fn open_shared_tokio() {
+    let _g = init_tracing();
+    open_shared_inner(AppMode::Tokio).await;
 }
 
 #[instrument]
-async fn open_shared_inner() {
+async fn open_shared_inner(mode: AppMode) {
     let path = common::create_temp_path();
     tracing::debug!("Temporary file path: {:?}", path.as_os_str());
 
-    let prog = TestProgram::new(AppMode::Std);
+    let prog = TestProgram::new(mode);
 
     {
         let mut proc = prog.spawn("Create file".to_owned());
