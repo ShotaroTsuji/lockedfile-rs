@@ -116,12 +116,19 @@ impl TestProcess {
 }
 
 #[derive(Debug,Clone,Copy)]
-struct TestProgram;
+struct TestProgram {
+    mode: AppMode,
+}
 
 impl TestProgram {
+    fn new(mode: AppMode) -> Self {
+        Self { mode: mode }
+    }
+
     #[instrument]
     fn spawn(&self, name: String) -> TestProcess {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_stdproc"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_app"))
+            .arg(self.mode.to_option_flag())
             .stderr(Stdio::null())
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
@@ -154,7 +161,7 @@ async fn exclusive_lock_inner() {
     let path = common::create_temp_path();
     tracing::debug!("Temporary file path: {:?}", path.as_os_str());
 
-    let testprog = TestProgram;
+    let testprog = TestProgram::new(AppMode::Std);
 
     let mut proc = testprog.spawn("Main process".to_owned());
 
@@ -190,7 +197,7 @@ async fn open_shared_inner() {
     let path = common::create_temp_path();
     tracing::debug!("Temporary file path: {:?}", path.as_os_str());
 
-    let prog = TestProgram;
+    let prog = TestProgram::new(AppMode::Std);
 
     {
         let mut proc = prog.spawn("Create file".to_owned());

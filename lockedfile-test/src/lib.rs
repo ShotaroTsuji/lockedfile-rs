@@ -4,6 +4,8 @@ use std::io::SeekFrom;
 use crate::file::File;
 
 pub mod file;
+pub mod repl;
+pub use crate::repl::AppMode;
 
 #[derive(Debug,Clone,PartialEq,Serialize,Deserialize)]
 #[serde(tag="Message")]
