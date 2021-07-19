@@ -2,6 +2,4 @@
 
 **ABONDONED**
 
-UNIX provides advisory locks.
-Windows provides mandatory locks.
-It is impossible to provide the same file lock functions across platforms.
+File locking APIs do not charm me now.
