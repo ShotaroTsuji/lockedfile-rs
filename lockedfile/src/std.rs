@@ -2,7 +2,7 @@ use std::path::Path;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt as UnixOpenOptionsExt;
 
-pub struct SharedFile(std::fs::File);
+pub struct SharedFile;
 
 impl SharedFile {
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<std::fs::File> {

@@ -56,13 +56,6 @@ create_and_write!(create_and_write_unlocked_file, std::fs::File);
 create_and_write!(create_and_write_owned_file, lockedfile::std::OwnedFile);
 
 #[test]
-fn open_and_read_owned_file() {
-    let path = create_temp_file_with_content();
-    let mut file = lockedfile::std::OwnedFile::open(&path).unwrap();
-    read_block(&mut file);
-}
-
-#[test]
 fn create_and_append_shared_file() {
     let path = common::create_temp_path();
     let mut file = OpenOptions::new()
