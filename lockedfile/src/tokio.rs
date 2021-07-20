@@ -17,7 +17,6 @@ impl OwnedFile {
     pub async fn open<P: AsRef<Path>>(path: P) -> std::io::Result<tokio::fs::File> {
         OpenOptions::new()
             .read(true)
-            .write(true)
             .open_exclusive(path)
             .await
     }

@@ -18,7 +18,6 @@ impl OwnedFile {
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<std::fs::File> {
         OpenOptions::new()
             .read(true)
-            .write(true)
             .open_exclusive(path)
     }
 
